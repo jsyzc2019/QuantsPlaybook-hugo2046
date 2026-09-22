@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "稀疏自编码器指数择时 · notebook 核心流程",
+    "locale": "zh-CN",
+    "output": "核心流程.html",
+    "viewBox": [
+      1076,
+      500
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "fetch",
+        "label": "① 取数落库",
+        "focus": [
+          "ts",
+          "raw"
+        ],
+        "note": "get_index_dataset 优先读缓存，缺失时补拉；DataFeed 为 Hugo 私有模块，不可用时使用 tushare 与 .env 的 TS_TOKEN。"
+      },
+      {
+        "id": "features",
+        "label": "② 特征与标签",
+        "focus": [
+          "raw",
+          "feats",
+          "wave",
+          "label"
+        ],
+        "note": "92 维量价特征 → 折外因果小波去噪；标签与 T+1 成交对齐，最后 6 行没有成熟标签。"
+      },
+      {
+        "id": "train",
+        "label": "③ 折划分与训练",
+        "focus": [
+          "split",
+          "sae",
+          "train",
+          "signal"
+        ],
+        "note": "2020–2025 六个样本外年度，折内预处理仅拟合训练行；当前 notebook 集成十个 seed，模块默认五个。"
+      },
+      {
+        "id": "verify",
+        "label": "④ 回测与展示",
+        "focus": [
+          "signal",
+          "bt",
+          "ref",
+          "store"
+        ],
+        "note": "notebook 展示原生账户净值与绩效；annual_performance 使用几何年化/波动计算 Sharpe。倒数收益回测为可选模块能力，未执行实验落库或锚点验收。"
+      }
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "emphasis": {
+          "label": "主链路"
+        },
+        "default": {
+          "label": "辅助输入"
+        },
+        "dashed": {
+          "label": "可选对照（notebook 未执行）"
+        },
+        "database": {
+          "label": "DuckDB 存储"
+        }
+      }
+    }
+  },
+  "stages": [
+    {
+      "label": "数据获取 · data_provider"
+    },
+    {
+      "label": "特征生产 · factor_algo"
+    },
+    {
+      "label": "模型 · splitter + model"
+    },
+    {
+      "label": "训练 · generator"
+    },
+    {
+      "label": "回测与展示 · analyze"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ts",
+      "type": "external",
+      "label": "TuShare 指数接口",
+      "sublabel": "index_daily + index_dailybasic",
+      "stage": 0,
+      "row": 0,
+      "tag": "按交易日分段",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "raw",
+      "type": "database",
+      "label": "DuckDB 行情库",
+      "sublabel": "market_quotes + trade_cal",
+      "stage": 0,
+      "row": 1,
+      "tag": "项目下 data/ 自动生成",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "feats",
+      "type": "backend",
+      "label": "build_features",
+      "sublabel": "92 维量价特征",
+      "stage": 1,
+      "row": 0,
+      "tag": "预热 250 日",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "wave",
+      "type": "backend",
+      "label": "causal_wavelet",
+      "sublabel": "db4 四级 · 只去 D1",
+      "stage": 1,
+      "row": 1,
+      "tag": "256 日因果窗",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "label",
+      "type": "backend",
+      "label": "forward_label",
+      "sublabel": "C[t+6] / C[t+1] − 1",
+      "stage": 1,
+      "row": 2,
+      "tag": "与 T+1 成交对齐",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "split",
+      "type": "backend",
+      "label": "年度扩展折划分",
+      "sublabel": "AnnualExpandingSplit",
+      "stage": 2,
+      "row": 1,
+      "tag": "gap 清标签边界",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "sae",
+      "type": "backend",
+      "label": "SAERegressor",
+      "sublabel": "92 → 64 → 16 → 64 → 92",
+      "stage": 2,
+      "row": 2,
+      "tag": "预测 + 重构 + KL",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "train",
+      "type": "backend",
+      "label": "逐年训练",
+      "sublabel": "6 折 × 10 seed × 100 epoch",
+      "stage": 3,
+      "row": 1,
+      "tag": "样本外预测",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "signal",
+      "type": "backend",
+      "label": "threshold_signal",
+      "sublabel": "score 均值 → −1 / 0 / +1",
+      "stage": 3,
+      "row": 2,
+      "tag": "±0.2% 迟滞",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "bt",
+      "type": "backend",
+      "label": "analyze.backtest",
+      "sublabel": "vectorbt 原生账户",
+      "stage": 4,
+      "row": 0,
+      "tag": "T+1 close 成交",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "store",
+      "type": "frontend",
+      "label": "表格与图形展示",
+      "sublabel": "净值 / 回撤 / 分年绩效",
+      "stage": 4,
+      "row": 1,
+      "tag": "当前 notebook 输出",
+      "width": 136,
+      "height": 64
+    },
+    {
+      "id": "ref",
+      "type": "backend",
+      "label": "倒数收益回测",
+      "sublabel": "report_reference.backtest",
+      "stage": 4,
+      "row": 2,
+      "tag": "可选 · 未调用",
+      "width": 136,
+      "height": 64
+    }
+  ],
+  "flows": [
+    {
+      "id": "fetch-store",
+      "from": "ts",
+      "to": "raw",
+      "label": "inner 拼接后落库",
+      "classification": "仅收完整行",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 33,
+      "labelDx": -6
+    },
+    {
+      "id": "quotes-to-features",
+      "from": "raw",
+      "to": "feats",
+      "label": "量价字段",
+      "classification": "高开低收 / 前收 / 换手率",
+      "variant": "emphasis"
+    },
+    {
+      "id": "quotes-to-label",
+      "from": "raw",
+      "to": "label",
+      "label": "收盘价序列",
+      "classification": "标签来源",
+      "variant": "default"
+    },
+    {
+      "id": "features-to-wavelet",
+      "from": "feats",
+      "to": "wave",
+      "label": "92 维原始特征",
+      "classification": "无缺失",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 33
+    },
+    {
+      "id": "denoised-to-split",
+      "from": "wave",
+      "to": "split",
+      "label": "去噪特征矩阵",
+      "classification": "折外算完",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -14
+    },
+    {
+      "id": "label-to-split",
+      "from": "label",
+      "to": "split",
+      "label": "成熟标签",
+      "classification": "不跨测试年",
+      "variant": "default"
+    },
+    {
+      "id": "split-to-model",
+      "from": "split",
+      "to": "sae",
+      "label": "折内标准化训练矩阵",
+      "classification": "只用训练行拟合",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 33,
+      "labelDx": -12
+    },
+    {
+      "id": "model-to-train",
+      "from": "sae",
+      "to": "train",
+      "label": "联合损失",
+      "classification": "预测 + 0.1×重构 + 0.1×KL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "train-to-signal",
+      "from": "train",
+      "to": "signal",
+      "label": "十 seed 预测求均值",
+      "classification": "集成",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 33,
+      "labelDx": 12
+    },
+    {
+      "id": "signal-to-backtest",
+      "from": "signal",
+      "to": "bt",
+      "label": "信号延后一日",
+      "classification": "零费用",
+      "variant": "emphasis",
+      "labelDx": -8,
+      "labelDy": -50
+    },
+    {
+      "id": "signal-to-reference",
+      "from": "signal",
+      "to": "ref",
+      "label": "同一组信号",
+      "classification": "换收益公式",
+      "variant": "dashed",
+      "route": "straight",
+      "labelDy": 45
+    },
+    {
+      "id": "backtest-to-store",
+      "from": "bt",
+      "to": "store",
+      "label": "原生账户净值与绩效",
+      "classification": "Sharpe：几何年化 / 波动",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 33
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "从 notebook 开始",
+      "items": [
+        "在项目目录复制 .env.example 为 .env，填写 TS_TOKEN",
+        "DataFeed 为 Hugo 私有；普通用户使用开源 tushare",
+        "打开 notebook/hy_sae_timing.ipynb，逐格运行",
+        "行情库自动生成于项目 data/；已有数据不随项目分发"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "训练与信息边界",
+      "items": [
+        "中证500，2020–2025 样本外，10 seed 集成",
+        "小波为 256 日因果窗；填补与标准化仅拟合训练行",
+        "标签 C[t+6]/C[t+1]−1；按成熟日清理折边界",
+        "模块默认 5 seed，图中采用 notebook 的 10 seed"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "展示结果与可选能力",
+      "items": [
+        "主回测为 vectorbt 原生账户，T+1 close 成交",
+        "分年绩效复用 report_reference.annual_performance",
+        "倒数收益回测、实验存储、锚点对照需显式调用",
+        "当前 notebook 不执行实验落库或自动研报验收"
+      ]
+    }
+  ]
+}

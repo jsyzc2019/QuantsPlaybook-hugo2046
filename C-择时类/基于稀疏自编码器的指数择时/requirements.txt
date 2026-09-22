@@ -1,0 +1,17 @@
+numpy>=1.24
+pandas>=2.1
+loguru>=0.7
+torch>=2.2
+TA-Lib>=0.6
+PyWavelets>=1.6
+matplotlib>=3.8
+seaborn>=0.13
+vectorbt>=1.0.0
+pytest>=8
+duckdb>=1.0
+typing_extensions>=4.0
+tushare>=1.4
+python-dotenv>=1.0
+# 行情取自TuShare（index_daily+index_dailybasic）：优先经DataFeed封装（仓库外，可选），缺失时读仓库根.env的TS_TOKEN。
+
+scikit-learn>=1.3
